@@ -1,4 +1,4 @@
---  animationEngine 5.1
+--  animationEngine 6.0
 -- ©2005 - 2015 derbrill IT service. To get in touch contact info@derbrill.de
 -- This stack was written by Malte Pfaff-Brill with the help of quite a few people
 -- No rocket sience involved, however many books read any a lot of work went into
@@ -17,9 +17,9 @@
 -- If you do not want to disclose the sources of your application you have the option to purchase a commercial license
 -- by paying a fee. You can buy a commercial license from the runrev marketplace. At the time of the writing of this document
 -- this can be done following this link: http://www.runrev.com/store/
--- You are paying a license fee for the major version of animationEngine. If you are licensing animationEngine 5.0.2, you will be
--- able to use all upgrades that carry the same major version number (in this case 5.x). Once the switch is made to a version
--- 6.x of the library, you will need to upgrade your license to use the latest version. However, of course you may continue to use
+-- You are paying a license fee for the major version of animationEngine. If you are licensing animationEngine 6.0, you will be
+-- able to use all upgrades that carry the same major version number (in this case 6.x). Once the switch is made to a version
+-- 7.x of the library, you will need to upgrade your license to use the latest version. However, of course you may continue to use
 -- any version of the library you currently have licensed, without needing to purchase an upgrade.
 -- Such a commercial license releases you from the requirements of the copyleft GPL license, which include: distribution of all 
 -- source code, including your own product; licensing of your own product under the GPL license; prominent mention of the 
@@ -29,10 +29,12 @@
 -- If you want to contribute to animationEngines codebase and want your changes to be accepted into the main trunc,
 -- you will have to accept our open source contribution agreement as found here: http://www.derbrill.de/osca.pdf
 
---> all handlers
 
 global animationEngineCurrentStackName
 
+local sAELockMorph,sAEMorphing
+local sAELockMorphGradientRamp,sAEMorphGradientRamp
+local sAELockRotateGroup,sAERotateGroup
 --> global stuff
 
 on releaseStack
@@ -3485,7 +3487,7 @@ end aeChangeTextSize
 --> 2.9 _toplevel handlers
 
 --> 2.9 moving stuff
-local tAeEasing,sAEFrameRate,sAERealFrameRate,sAELockMoves
+local tAeEasing,tAEEasingCircular,sAEFrameRate,sAERealFrameRate,sAELockMoves
 
 function aeGetAverageFrameRate
    if sAERealFrameRate is not empty then
@@ -3511,13 +3513,52 @@ private command aeResetFrameRate
    put 25 into sAERealFrameRate
 end aeResetFrameRate
 
-on aeMorphGraphic pControl,pPointList1,pPointList2,pDuration,pMethod
+
+
+on aeChangeAngleCircular
+   local tControl,tX,tY,tRadius,tNewAngle,tDuration,tMethod,theValue,tCurrentAngle,tDirection
    if sAEFrameRate is empty then aeResetFrameRate
-   if there is no pControl then return "error:"&&pControl&&"is not a valid control or group or stack"
-   if word 1 of the long name of pControl <> "graphic" then return "error: can aeMorphGraphic can only operate on graphics"
-
-
-end aeMorphGraphic
+   repeat with i=1 to paramcount()
+      if i<paramcount() then
+         put param(i)&"," after theValue
+      else
+         put param(i) after theValue
+      end if
+   end repeat
+   put item 1 of theValue into tControl
+   put item 2 of theValue into tX
+   put item 3 of theValue into tY
+   put item 4 of theValue into tRadius
+   put item 5 of theValue into tNewAngle
+   put item 6 of theValue into tDuration
+   put item 7 of theValue into tDirection
+   put item 8 of theValue into tMethod
+   if there is no tControl then return "error:"&&tControl&&"is not a valid control or group or stack"
+   if word 1 of the long name of tControl is "card" then return "error: can not move a card"
+   if tX is not an integer then return "error:"&&tX&","&tY&&"is not a valid point"
+   if tY is not an integer then return "error:"&&tX&","&tY&&"is not a valid point"
+   if tRadius is not a number then return "error:" && tRadius && "is not a number (radius)"
+   if tNewAngle is not a number then return "error:" && tNewAngle && "is not a number (newAngle)"
+   if tduration is not a number then return "error:"&&tDuration&&"is not a valid duration"
+   if tMethod is not among the items of "in,out,inout,bounce,overshoot," then return "error:"&&tDuration&&"is not a valid easing method. Must be in,out or inOut"
+   put findAngleX(tX,tY,item 1 of the the loc of tControl,item 2 of the loc of tControl) into tCurrentAngle
+   switch tDirection
+      case "clockwise"
+         if tNewAngle < tCurrentAngle then add 360 to tNewAngle
+         break
+      case "counterClockwise"
+         if tNewAngle > tCurrentAngle then add 360 to tCurrentAngle
+         break
+   end switch
+   if not sAELockMoves then
+      put tX,tY,tDuration,tMethod,tCurrentAngle,tNewAngle,tRadius,the milliseconds into tAeEasingCircular[the long id of tControl]
+      if "aeGeneral" is not in the pendingmessages then
+         aeGeneral
+      end if
+   else
+      put tX,tY,tDuration,tMethod,tCurrentAngle,tNewAngle,tRadius,"pending" into tAeEasingCircular[the long id of tControl]
+   end if
+end aeChangeAngleCircular
 
 on aeMoveTo
    local tControl,tX,tY,tDuration,tMethod,theValue
@@ -3566,6 +3607,7 @@ on aeUnlockMoves
 end aeUnlockMoves
 
 local sTimeTaken
+
 command aeGeneral
    lock screen
    local tTimeLost,tFramesLost,tElapsed
@@ -3629,10 +3671,149 @@ command aeGeneral
       end if
       send "aeExitFrame" && "aeMoveTo" to pControl
    end repeat
-   --   unlock screen
+   
+   local tCenterX,tCenterY,tRadius,tStartAngle,tEndAngle,tNewAngle
+   -- tX,tY,tDuration,tMethod,findAngleX(tX,tY,item 1 of the the loc of tControl,item 2 of the loc of tControl),"pending"
+   repeat for each line pControl in the keys of tAEEasingCircular
+      send "aeEnterFrame"  && "aeChangeAngleCircular" to pcontrol
+      put item 1 of tAEEasingCircular[pControl] into tCenterX 
+      put item 2 of tAEEasingCircular[pControl] into tCenterY
+      put item 3 of tAEEasingCircular[pControl] into tDuration
+      put item 4 of tAEEasingCircular[pControl] into tMethod
+      put item 5 of tAEEasingCircular[pControl] into tStartAngle
+      put item 6 of tAEEasingCircular[pControl] into tEndAngle
+      put item 7 of tAEEasingCircular[pControl] into tRadius
+      put item 8 of tAEEasingCircular[pControl] into tStartTime
+      if tStartTime="pending" then next repeat
+      --      put tRadius
+      --      exit to top
+      switch tMethod
+         case "in"
+            put aeEaseIn(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
+            break
+         case "out"
+            put aeEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
+            break
+         case "inOut"
+            put aeEaseInOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
+            break
+         case "bounce"
+            put aeBounceEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime) into tNewAngle
+            break
+         case "overshoot"
+            put aeOverShootEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime) into tNewAngle
+            break
+         default
+            put aeEaseIn(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,1) into tNewAngle
+            break
+      end switch
+      if the milliseconds-tStartTime<tDuration then
+         set the loc of pControl to pointOnCircle(tCenterX,tCenterY,tNewAngle,tRadius)
+      else
+         if tDestx,tDestY is a point then
+            set the loc of pControl to pointOnCircle(tCenterX,tCenterY,tEndAngle,tRadius)
+         end if
+         delete variable tAeEasingCircular[pControl]
+         send "aeMoveDone" to pControl
+      end if
+      send "aeExitFrame" && "aeChangeAngleCircular" to pControl
+   end repeat
+   
+   -- morphing
+   
+   repeat for each line pControl in the keys of sAEMorphing
+      send "aeEnterFrame" && "aeMorphGraphic" to pControl
+      if sAEMorphing[pControl]["StartTime"] <> "pending" then
+         if the millisecs - sAEMorphing[pControl]["StartTime"] < sAEMorphing[pControl]["duration"] then
+            --aeMorphPointlists pList1,pList2,pDuration,pCurrentTime,pEffect
+            --put the millisecs & cr & aeMorphPointlists(sAEMorphing[pControl]["p1"],sAEMorphing[pControl]["p2"],sAEMorphing[pControl]["duration"],the milliSecs -sAEMorphing[pControl]["StartTime"] , sAEMorphing[pControl]["Effect"]  )
+            set the points of pControl to aeMorphPointlists(sAEMorphing[pControl]["p1"],sAEMorphing[pControl]["p2"],sAEMorphing[pControl]["duration"],the milliSecs -sAEMorphing[pControl]["StartTime"] , sAEMorphing[pControl]["Effect"]  )
+         else
+            set the points of pControl to sAEMorphing[pControl]["p2"]
+            delete variable sAEMorphing[pControl]
+            send "aeMorphDone" to pControl
+         end if
+      end if
+      send "aeExitFrame" && "aeMorphGraphic" to pControl
+   end repeat
+   
+   --  sAEMorphGradientRamp
+   repeat for each line pControl in the keys of sAEMorphGradientRamp
+      send "aeEnterFrame" && "aeMorphGradient" to pControl
+      if sAEMorphGradientRamp[pControl]["StartTime"] <> "pending" then
+         if the millisecs - sAEMorphGradientRamp[pControl]["StartTime"] < sAEMorphGradientRamp[pControl]["duration"] then
+            --aeMorphPointlists pList1,pList2,pDuration,pCurrentTime,pEffect
+            set the fillGradient["ramp"] of pControl to aeMorphGradient(sAEMorphGradientRamp[pControl]["p1"],sAEMorphGradientRamp[pControl]["p2"],sAEMorphGradientRamp[pControl]["duration"],the milliSecs -sAEMorphGradientRamp[pControl]["StartTime"] , sAEMorphGradientRamp[pControl]["Effect"] )
+         else
+            set the fillGradient["ramp"] of pControl to sAEMorphGradientRamp[pControl]["p2"]
+            delete variable sAEMorphGradientRamp[pControl]
+            send "aeMorphGradientDone" to pControl
+         end if
+      end if
+      send "aeExitFrame" && "aeMorphGradient" to pControl
+   end repeat
+   
+   -- rotate group
+   
+   repeat for each line theGroup in the keys of sAERotateGroup
+      send "aeEnterFrame" && "aeRotateGroup" to theGroup
+      if sAERotateGroup[theGroup]["StartTime"] <> "pending" then
+         put sAERotateGroup[theGroup]["duration"] into tDuration
+         put sAERotateGroup[theGroup]["StartTime"] into tStartTime
+         put sAERotateGroup[theGroup]["Effect"] into tMethod
+         
+         if the millisecs - sAERotateGroup[theGroup]["StartTime"] < tDuration then
+            repeat for each line theControl in the keys of sAERotateGroup[theGroup]["controls"]
+               
+               put sAERotateGroup[theGroup]["Angle"] + sAERotateGroup[theGroup]["controls"][theControl]["Angle"] into tEndAngle
+               put sAERotateGroup[theGroup]["controls"][theControl]["Angle"] into tStartAngle
+               
+               switch tMethod
+                  case "in"
+                     put aeEaseIn(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
+                     break
+                  case "out"
+                     put aeEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
+                     break
+                  case "inOut"
+                     put aeEaseInOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
+                     break
+                  case "bounce"
+                     put aeBounceEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime) into tNewAngle
+                     break
+                  case "overshoot"
+                     put aeOverShootEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime) into tNewAngle
+                     break
+                  default
+                     put aeEaseIn(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,1) into tNewAngle
+                     break
+               end switch
+               
+               /*
+               put item 1 of theValue into centerX
+               put item 2 of theValue into centerY
+               put item 3 of theValue into isAngle
+               put item 4 of theValue into isRadius
+               */
+               
+               set the loc of theControl to pointOnCircle(sAERotateGroup[theGroup]["center"],tNewAngle,sAERotateGroup[theGroup]["controls"][theControl]["Distance"])
+            end repeat
+            
+         else
+            repeat for each line theControl in the keys of sAERotateGroup[theGroup]["controls"]
+               put sAERotateGroup[theGroup]["Angle"] + sAERotateGroup[theGroup]["controls"][theControl]["Angle"] into tEndAngle
+               set the loc of theControl to pointOnCircle(sAERotateGroup[theGroup]["center"],tEndAngle,sAERotateGroup[theGroup]["controls"][theControl]["Distance"])
+            end repeat
+            
+            delete variable sAERotateGroup[theGroup]
+         end if
+         
+      end if
+   end repeat
+   
    unlock screen
    put the milliseconds-tElapsed into tElapsed
-   if the keys of tAeEasing is not empty then
+   if the keys of tAeEasing is not empty OR the keys of tAEEasingCircular is not empty OR the keys of sAEMorphing is not empty OR the keys of sAEMorphGradientRamp is not empty OR the keys of sAERotateGroup is not empty then
       if tElapsed < 1000 / sAEFrameRate then
          if "aeGeneral" is not in the pendingmessages then
             send "aeGeneral" to me in (1000/sAEFRameRate)- tElapsed millisecs
@@ -3649,6 +3830,11 @@ end aeGeneral
 on aeMoveDone
    -- trapped to avoid scripterrors
 end aeMoveDone
+
+on aeMorphDone
+   -- trapped to avoid scripterrors
+end aeMorphDone
+
 
 on aeEnterFrame
    
@@ -3693,7 +3879,79 @@ function aeWithinEllipse
    return (tX2-tX)^2 / tradx^2 + (ty2-ty)^2 / trady^2 <=1
 end aeWithinEllipse
 
---> 5.2 morph pointlists
+
+
+--> 6.0 morph pointlists
+
+on aeLockMorph
+   put true into sAELockMorph
+end aeLockMorph
+
+on aeUnlockMorph
+   put false into sAELockMorph
+   if "aeGeneral" is not in the pendingMessages then
+      aeGeneral
+   end if
+end aeUnlockMorph
+
+on aeLockMorphGradientRamp
+   put true into sAELockMorphGradientRamp
+end aeLockMorphGradientRamp
+
+on aeUnlockMorphGradientRamp
+   put false into sAELockMorphGradientRamp
+   if "aeGeneral" is not in the pendingMessages then
+      aeGeneral
+   end if
+end aeUnlockMorphGradientRamp
+
+
+on aeMorphGraphic pControl,pPointList1,pPointList2,pDuration,pEffect
+   if sAEFrameRate is empty then aeResetFrameRate
+   if there is no pControl then return "error:"&&pControl&&"is not a valid control or group or stack"
+   if word 1 of the long name of pControl is not "graphic" then return "error: morphing only works for graphics"
+   if the number of lines of pPointList1 <> the number of lines of pPointList2 then return "error: pointlists must have equal number of lines"
+   if pDuration is not a number then return "error:"&&pDuration&&"is not a valid duration"
+   if pEffect is not among the items of "in,out,inout,bounce,overshoot," then return "error:"&&pEffect&&"is not a valid easing method. Must be in,out or inOut"
+   put pPointList1 into sAEMorphing[the long id of pControl]["p1"]
+   put pPointList2 into sAEMorphing[the long id of pControl]["p2"]
+   put pDuration into sAEMorphing[the long id of pControl]["duration"]
+   put pEffect into sAEMorphing[the long id of pControl]["Effect"]
+   if not sAELockMorph then
+      put the millisecs into sAEMorphing[the long id of pControl]["startTime"]
+      if "aeGeneral" is not in the pendingmessages then
+         aeGeneral
+      end if
+   else
+      put "pending" into sAEMorphing[the long id of pControl]["startTime"]
+   end if
+end aeMorphGraphic
+
+on aeMorphGradientRamp pControl,pPointList1,pPointList2,pDuration,pEffect
+   if sAEFrameRate is empty then aeResetFrameRate
+   if there is no pControl then return "error:"&&pControl&&"is not a valid control or group or stack"
+   if word 1 of the long name of pControl is not "graphic" then return "error: morphing only works for graphics"
+   if the number of lines of pPointList1 <> the number of lines of pPointList2 then return "error: pointlists must have equal number of lines"
+   if pDuration is not a number then return "error:"&&pDuration&&"is not a valid duration"
+   if pEffect is not among the items of "in,out,inout,bounce,overshoot," then return "error:"&&pEffect&&"is not a valid easing method. Must be in,out or inOut"
+   put pPointList1 into sAEMorphGradientRamp[the long id of pControl]["p1"]
+   put pPointList2 into sAEMorphGradientRamp[the long id of pControl]["p2"]
+   put pDuration into sAEMorphGradientRamp[the long id of pControl]["duration"]
+   put pEffect into sAEMorphGradientRamp[the long id of pControl]["Effect"]
+   if not sAELockMorphGradientRamp then
+      put the millisecs into sAEMorphGradientRamp[the long id of pControl]["startTime"]
+      if "aeGeneral" is not in the pendingmessages then
+         aeGeneral
+      end if
+   else
+      put "pending" into sAEMorphGradientRamp[the long id of pControl]["startTime"]
+   end if
+end aeMorphGradientRamp
+
+on aeMorphGradientDone
+   
+end aeMorphGradientDone
+
 function aeMorphPointlists pList1,pList2,pDuration,pCurrentTime,pEffect
    local tResultList,tCounter
    if the number of lines of pList1 <> the number of lines of pList2 then return "error: number of points in lists is not equal"
@@ -3705,7 +3963,19 @@ function aeMorphPointlists pList1,pList2,pDuration,pCurrentTime,pEffect
       end if
       switch pEffect
          case "bounce"
-            put aeBounceEaseIn(item 1 of line tCounter of pList1,item 1 of line tCounter of pList2,pDuration,pCurrentTime) & "," & aeBounceEaseIn(item 2 of line tCounter of pList1,item 2 of line tCounter of pList2,pDuration,pCurrentTime) & cr after tResultList
+            put aeBounceEaseOut(item 1 of line tCounter of pList1,item 1 of line tCounter of pList2,pDuration,pCurrentTime) & "," & aeBounceEaseOut(item 2 of line tCounter of pList1,item 2 of line tCounter of pList2,pDuration,pCurrentTime) & cr after tResultList
+            break
+         case "overShoot"
+            put aeoverShootEaseOut(item 1 of line tCounter of pList1,item 1 of line tCounter of pList2,pDuration,pCurrentTime) & "," & aeOvershootEaseOut(item 2 of line tCounter of pList1,item 2 of line tCounter of pList2,pDuration,pCurrentTime) & cr after tResultList
+            break
+         case "in"
+            put aeEaseIn(item 1 of line tCounter of pList1,item 1 of line tCounter of pList2,pDuration,pCurrentTime,3) & "," & aeEaseIn(item 2 of line tCounter of pList1,item 2 of line tCounter of pList2,pDuration,pCurrentTime,3) & cr after tResultList
+            break
+         case "out"
+            put aeEaseOut(item 1 of line tCounter of pList1,item 1 of line tCounter of pList2,pDuration,pCurrentTime,3) & "," & aeEaseOut(item 2 of line tCounter of pList1,item 2 of line tCounter of pList2,pDuration,pCurrentTime,3) & cr after tResultList
+            break
+         case "inOut"
+            put aeEaseInOut(item 1 of line tCounter of pList1,item 1 of line tCounter of pList2,pDuration,pCurrentTime,3) & "," & aeEaseInOut(item 2 of line tCounter of pList1,item 2 of line tCounter of pList2,pDuration,pCurrentTime,3) & cr after tResultList
             break
          default
             put aeEaseIn(item 1 of line tCounter of pList1,item 1 of line tCounter of pList2,pDuration,pCurrentTime,2) & "," & aeEaseIn(item 2 of line tCounter of pList1,item 2 of line tCounter of pList2,pDuration,pCurrentTime,2) & cr after tResultList
@@ -3715,6 +3985,106 @@ function aeMorphPointlists pList1,pList2,pDuration,pCurrentTime,pEffect
    delete char -1 of tResultList
    return tResultList
 end aeMorphPointlists
+
+function aeMorphLists pList1,pList2,pDuration,pCurrentTime,pEffect,pRound,pMin,pMax
+   local tResultList,tCounter,tVal
+   if the number of lines of pList1 <> the number of lines of pList2 then return "error: number of lines in lists is not equal"
+   repeat for each line theLine in pList1
+      add 1 to tCounter
+      if line tCounter of pList1 is empty or line tCounter of pList2 is empty then
+         put cr after tResultList
+         next repeat
+      end if
+      if the number of items of  line tCounter of pList1<> the number of items of line tCounter of pList2 then return "error: number of items in lists is not equal"
+      repeat with i=1 to the number of items of theLine
+         switch pEffect
+            case "bounce"
+               put aeBounceEaseOut(item i of line tCounter of pList1,item i of line tCounter of pList2,pDuration,pCurrentTime) into tVal 
+               break
+            case "overShoot"
+               put aeoverShootEaseOut(item i of line tCounter of pList1,item i of line tCounter of pList2,pDuration,pCurrentTime) into tVal
+               break
+            case "in"
+               put aeEaseIn(item i of line tCounter of pList1,item i of line tCounter of pList2,pDuration,pCurrentTime,3) into tVal
+               break
+            case "out"
+               put aeEaseOut(item i of line tCounter of pList1,item i of line tCounter of pList2,pDuration,pCurrentTime,3) into tVal
+               break
+            case "inOut"
+               put aeEaseInOut(item i of line tCounter of pList1,item i of line tCounter of pList2,pDuration,pCurrentTime,3) into tVal
+               break
+            default
+               put aeEaseIn(item i of line tCounter of pList1,item i of line tCounter of pList2,pDuration,pCurrentTime,2) into tVal
+               break
+         end switch
+         if pRound is true then put round(tVal) into tVal
+         if pMin is not empty then
+            if tVal < pMin then 
+               put pMin into tVal
+            end if
+         end if
+          if pMax is not empty then
+            if tVal > pMax then 
+               put pMax into tVal
+            end if
+         end if
+         put tVal & "," after tResultList
+      end repeat
+      put cr into char -1 of tResultList
+   end repeat
+   delete char -1 of tResultList
+   return tResultList
+end aeMorphLists
+
+
+function aeMorphGradient pList1,pList2,pDuration,pCurrentTime,pEffect
+   --answer pDuration & cr & pCurrenttime
+   local tResultList,tCounter,tVal
+   if the number of lines of pList1 <> the number of lines of pList2 then return "error: number of lines in lists is not equal"
+   repeat for each line theLine in pList1
+      add 1 to tCounter
+      if line tCounter of pList1 is empty or line tCounter of pList2 is empty then
+         put cr after tResultList
+         next repeat
+      end if
+      if the number of items of  line tCounter of pList1<> the number of items of line tCounter of pList2 then return "error: number of items in lists is not equal"
+      repeat with i=1 to the number of items of theLine
+         switch pEffect
+            case "bounce"
+               put aeBounceEaseOut(item i of line tCounter of pList1,item i of line tCounter of pList2,pDuration,pCurrentTime) into tVal 
+               break
+            case "overShoot"
+               put aeoverShootEaseOut(item i of line tCounter of pList1,item i of line tCounter of pList2,pDuration,pCurrentTime) into tVal
+               break
+            case "in"
+               put aeEaseIn(item i of line tCounter of pList1,item i of line tCounter of pList2,pDuration,pCurrentTime,3) into tVal
+               break
+            case "out"
+               put aeEaseOut(item i of line tCounter of pList1,item i of line tCounter of pList2,pDuration,pCurrentTime,3) into tVal
+               break
+            case "inOut"
+               put aeEaseInOut(item i of line tCounter of pList1,item i of line tCounter of pList2,pDuration,pCurrentTime,3) into tVal
+               break
+            default
+               put aeEaseIn(item i of line tCounter of pList1,item i of line tCounter of pList2,pDuration,pCurrentTime,2) into tVal
+               break
+         end switch
+         if i=1 then
+            if tVal > 1 then put 1 into tVal
+            if tVal <0 then put 0 into tVal
+         end if
+         if i>1 then
+            put round(tVal) into tVal
+            if tVal > 255 then put 255 into tVal
+            if tVal <0 then put 0 into tVal
+         end if
+         put tVal & "," after tResultList
+      end repeat
+      put cr into char -1 of tResultList
+   end repeat
+   delete char -1 of tResultList
+   return tResultList
+end aeMorphGradient
 
 --> 2.9 easing stuff
 
@@ -3796,11 +4166,28 @@ on aeRotateGroup
    put item 1 of theValue into tControl
    put item 2 of theValue into tX
    put item 3 of theValue into tY
-   put item 4 of theValue into tDuration
+   put item 4 of theValue into tAngle
+   put item 5 of theValue into tDuration
+   put item 6 of theValue into tMethod
+   
    repeat with i=1 to the number of controls of tControl
-      put distance(tx,ty,the loc of control i of tControl) into tDistance[the long name of control i of tControl]
-      put findPreciseAngleX(tX,tY,the loc of control i of tControl) into tAngle[the long name of control i of tControl]
+      if the name of control i of tControl begins with "group" then next repeat
+      put distance(tx,ty,the loc of control i of tControl) into sAERotateGroup[tControl]["controls"][the long ID of control i of tControl]["Distance"]
+      put findPreciseAngleX(tX,tY,the loc of control i of tControl) into sAERotateGroup[tControl]["controls"][the long ID of control i of tControl]["Angle"]
    end repeat
+   put tX,tY into sAERotateGroup[tControl]["center"]
+   put tMethod into sAERotateGroup[tControl]["Effect"]
+   put tDuration into sAERotateGroup[tControl]["Duration"]
+   put tAngle into sAERotateGroup[tControl]["Angle"]
+   
+   if not sAELockRotateGroup then
+      put the milliSecs into sAERotateGroup[tControl]["StartTime"]
+      if "aeGeneral" is not in the pendingmessages then
+         aeGeneral
+      end if
+   else
+      put "pending" into sAERotateGroup[tControl]["StartTime"]
+   end if
 end aeRotateGroup
 
 local moof
@@ -5483,6 +5870,14 @@ on aeStopChangingForeColor tControl
       delete variable tAEChangeForeColor[the long id of tControl]
    end if
 end aeStopChangingForeColor
+
+on aeStopMorphing tControl
+   if tControl="all" then
+      delete variable sAEMorphing
+   else
+      delete variable sAEMorphing[the long id of tControl]
+   end if
+end aeStopMorphing
 
 --> 4.0 update
 
