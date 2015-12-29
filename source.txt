@@ -1,4 +1,4 @@
---  animationEngine 6.0
+--  animationEngine 6.0.1
 -- ©2005 - 2015 derbrill IT service. To get in touch contact info@derbrill.de
 -- This stack was written by Malte Pfaff-Brill with the help of quite a few people
 -- No rocket sience involved, however many books read any a lot of work went into
@@ -3610,7 +3610,7 @@ local sTimeTaken
 
 command aeGeneral
    lock screen
-   local tTimeLost,tFramesLost,tElapsed
+   local tTimeLost,tFramesLost,tElapsed,tControls
    local tX,tY,tDuration,tMethod,tEndX,tStartX,tDestX,tStartY,tDestY,tStartTime
    if sAEFrameRate is not a number then aeResetFrameRate
    put the milliseconds into tElapsed
@@ -3624,190 +3624,216 @@ command aeGeneral
    put tFramesLost into sAERealFrameRate
    put the millisecs into sTimeTaken
    --lock screen
-   repeat for each line pControl in the keys of tAEEasing
-      send "aeEnterFrame"  && "aeMoveTo" to pcontrol
-      put item 1 of tAEEasing[pControl] into tDestX 
-      put item 2 of tAEEasing[pControl] into tDestY
-      put item 3 of tAEEasing[pControl] into tDuration
-      put item 4 of tAEEasing[pControl] into tMethod
-      put item 5 of tAEEasing[pControl] into tStartX
-      put item 6 of tAEEasing[pControl] into tStartY
-      put item 7 of tAEEasing[pControl] into tStartTime
-      if tStartTime="pending" then next repeat
-      switch tMethod
-         case "in"
-            put aeEaseIn(tStartX,tDestX,tDuration,the milliseconds-tStartTime,3) into tX
-            put aeEaseIn(tStartY,tDestY,tDuration,the milliseconds-tStartTime,3) into ty
-            break
-         case "out"
-            put aeEaseOut(tStartX,tDestX,tDuration,the milliseconds-tStartTime,3) into tX
-            put aeEaseOut(tStartY,tDestY,tDuration,the milliseconds-tStartTime,3) into ty
-            break
-         case "inOut"
-            put aeEaseInOut(tStartX,tDestX,tDuration,the milliseconds-tStartTime,3) into tX
-            put aeEaseInOut(tStartY,tDestY,tDuration,the milliseconds-tStartTime,3) into ty
-            break
-         case "bounce"
-            put aeBounceEaseOut(tStartX,tDestX,tDuration,the milliseconds-tStartTime) into tX
-            put aeBounceEaseOut(tStartY,tDestY,tDuration,the milliseconds-tStartTime) into ty
-            break
-         case "overshoot"
-            put aeOverShootEaseOut(tStartX,tDestX,tDuration,the milliseconds-tStartTime) into tX
-            put aeOverShootEaseOut(tStartY,tDestY,tDuration,the milliseconds-tStartTime) into ty
-            break
-         default
-            put aeEaseIn(tStartX,tDestX,tDuration,the milliseconds-tStartTime,1) into tX
-            put aeEaseIn(tStartY,tDestY,tDuration,the milliseconds-tStartTime,1) into ty
-            break
-      end switch
-      if the milliseconds-tStartTime<tDuration then
-         set the loc of pControl to tX,tY
-      else
-         if tDestx,tDestY is a point then
-            set the loc of pControl to tDestX,tDestY
+   put the keys of tAEEasing into tControls
+   repeat for each line pControl in tControls
+      -- housekeeping!
+      -- need to check if control really exists!
+      if there is a pControl then
+         send "aeEnterFrame"  && "aeMoveTo" to pcontrol
+         put item 1 of tAEEasing[pControl] into tDestX 
+         put item 2 of tAEEasing[pControl] into tDestY
+         put item 3 of tAEEasing[pControl] into tDuration
+         put item 4 of tAEEasing[pControl] into tMethod
+         put item 5 of tAEEasing[pControl] into tStartX
+         put item 6 of tAEEasing[pControl] into tStartY
+         put item 7 of tAEEasing[pControl] into tStartTime
+         if tStartTime="pending" then next repeat
+         switch tMethod
+            case "in"
+               put aeEaseIn(tStartX,tDestX,tDuration,the milliseconds-tStartTime,3) into tX
+               put aeEaseIn(tStartY,tDestY,tDuration,the milliseconds-tStartTime,3) into ty
+               break
+            case "out"
+               put aeEaseOut(tStartX,tDestX,tDuration,the milliseconds-tStartTime,3) into tX
+               put aeEaseOut(tStartY,tDestY,tDuration,the milliseconds-tStartTime,3) into ty
+               break
+            case "inOut"
+               put aeEaseInOut(tStartX,tDestX,tDuration,the milliseconds-tStartTime,3) into tX
+               put aeEaseInOut(tStartY,tDestY,tDuration,the milliseconds-tStartTime,3) into ty
+               break
+            case "bounce"
+               put aeBounceEaseOut(tStartX,tDestX,tDuration,the milliseconds-tStartTime) into tX
+               put aeBounceEaseOut(tStartY,tDestY,tDuration,the milliseconds-tStartTime) into ty
+               break
+            case "overshoot"
+               put aeOverShootEaseOut(tStartX,tDestX,tDuration,the milliseconds-tStartTime) into tX
+               put aeOverShootEaseOut(tStartY,tDestY,tDuration,the milliseconds-tStartTime) into ty
+               break
+            default
+               put aeEaseIn(tStartX,tDestX,tDuration,the milliseconds-tStartTime,1) into tX
+               put aeEaseIn(tStartY,tDestY,tDuration,the milliseconds-tStartTime,1) into ty
+               break
+         end switch
+         if the milliseconds-tStartTime<tDuration then
+            set the loc of pControl to tX,tY
+         else
+            if tDestx,tDestY is a point then
+               set the loc of pControl to tDestX,tDestY
+            end if
+            delete variable tAeEasing[pControl]
+            send "aeMoveDone" to pControl
          end if
+         send "aeExitFrame" && "aeMoveTo" to pControl
+      else
          delete variable tAeEasing[pControl]
-         send "aeMoveDone" to pControl
       end if
-      send "aeExitFrame" && "aeMoveTo" to pControl
    end repeat
    
    local tCenterX,tCenterY,tRadius,tStartAngle,tEndAngle,tNewAngle
    -- tX,tY,tDuration,tMethod,findAngleX(tX,tY,item 1 of the the loc of tControl,item 2 of the loc of tControl),"pending"
-   repeat for each line pControl in the keys of tAEEasingCircular
-      send "aeEnterFrame"  && "aeChangeAngleCircular" to pcontrol
-      put item 1 of tAEEasingCircular[pControl] into tCenterX 
-      put item 2 of tAEEasingCircular[pControl] into tCenterY
-      put item 3 of tAEEasingCircular[pControl] into tDuration
-      put item 4 of tAEEasingCircular[pControl] into tMethod
-      put item 5 of tAEEasingCircular[pControl] into tStartAngle
-      put item 6 of tAEEasingCircular[pControl] into tEndAngle
-      put item 7 of tAEEasingCircular[pControl] into tRadius
-      put item 8 of tAEEasingCircular[pControl] into tStartTime
-      if tStartTime="pending" then next repeat
-      --      put tRadius
-      --      exit to top
-      switch tMethod
-         case "in"
-            put aeEaseIn(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
-            break
-         case "out"
-            put aeEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
-            break
-         case "inOut"
-            put aeEaseInOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
-            break
-         case "bounce"
-            put aeBounceEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime) into tNewAngle
-            break
-         case "overshoot"
-            put aeOverShootEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime) into tNewAngle
-            break
-         default
-            put aeEaseIn(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,1) into tNewAngle
-            break
-      end switch
-      if the milliseconds-tStartTime<tDuration then
-         set the loc of pControl to pointOnCircle(tCenterX,tCenterY,tNewAngle,tRadius)
-      else
-         if tDestx,tDestY is a point then
-            set the loc of pControl to pointOnCircle(tCenterX,tCenterY,tEndAngle,tRadius)
+   put the keys of tAEEasingCircular into tControls
+   repeat for each line pControl in tControls
+      if there is a pControl then
+         send "aeEnterFrame"  && "aeChangeAngleCircular" to pcontrol
+         put item 1 of tAEEasingCircular[pControl] into tCenterX 
+         put item 2 of tAEEasingCircular[pControl] into tCenterY
+         put item 3 of tAEEasingCircular[pControl] into tDuration
+         put item 4 of tAEEasingCircular[pControl] into tMethod
+         put item 5 of tAEEasingCircular[pControl] into tStartAngle
+         put item 6 of tAEEasingCircular[pControl] into tEndAngle
+         put item 7 of tAEEasingCircular[pControl] into tRadius
+         put item 8 of tAEEasingCircular[pControl] into tStartTime
+         if tStartTime="pending" then next repeat
+         --      put tRadius
+         --      exit to top
+         switch tMethod
+            case "in"
+               put aeEaseIn(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
+               break
+            case "out"
+               put aeEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
+               break
+            case "inOut"
+               put aeEaseInOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
+               break
+            case "bounce"
+               put aeBounceEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime) into tNewAngle
+               break
+            case "overshoot"
+               put aeOverShootEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime) into tNewAngle
+               break
+            default
+               put aeEaseIn(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,1) into tNewAngle
+               break
+         end switch
+         if the milliseconds-tStartTime<tDuration then
+            set the loc of pControl to pointOnCircle(tCenterX,tCenterY,tNewAngle,tRadius)
+         else
+            if tDestx,tDestY is a point then
+               set the loc of pControl to pointOnCircle(tCenterX,tCenterY,tEndAngle,tRadius)
+            end if
+            delete variable tAeEasingCircular[pControl]
+            send "aeMoveDone" to pControl
          end if
+         send "aeExitFrame" && "aeChangeAngleCircular" to pControl
+      else
          delete variable tAeEasingCircular[pControl]
-         send "aeMoveDone" to pControl
       end if
-      send "aeExitFrame" && "aeChangeAngleCircular" to pControl
    end repeat
    
    -- morphing
-   
-   repeat for each line pControl in the keys of sAEMorphing
-      send "aeEnterFrame" && "aeMorphGraphic" to pControl
-      if sAEMorphing[pControl]["StartTime"] <> "pending" then
-         if the millisecs - sAEMorphing[pControl]["StartTime"] < sAEMorphing[pControl]["duration"] then
-            --aeMorphPointlists pList1,pList2,pDuration,pCurrentTime,pEffect
-            --put the millisecs & cr & aeMorphPointlists(sAEMorphing[pControl]["p1"],sAEMorphing[pControl]["p2"],sAEMorphing[pControl]["duration"],the milliSecs -sAEMorphing[pControl]["StartTime"] , sAEMorphing[pControl]["Effect"]  )
-            set the points of pControl to aeMorphPointlists(sAEMorphing[pControl]["p1"],sAEMorphing[pControl]["p2"],sAEMorphing[pControl]["duration"],the milliSecs -sAEMorphing[pControl]["StartTime"] , sAEMorphing[pControl]["Effect"]  )
-         else
-            set the points of pControl to sAEMorphing[pControl]["p2"]
-            delete variable sAEMorphing[pControl]
-            send "aeMorphDone" to pControl
+   put the keys of sAEMorphing into tControls
+   repeat for each line pControl in tControls
+      if there is a pControl then
+         send "aeEnterFrame" && "aeMorphGraphic" to pControl
+         if sAEMorphing[pControl]["StartTime"] <> "pending" then
+            if the millisecs - sAEMorphing[pControl]["StartTime"] < sAEMorphing[pControl]["duration"] then
+               --aeMorphPointlists pList1,pList2,pDuration,pCurrentTime,pEffect
+               --put the millisecs & cr & aeMorphPointlists(sAEMorphing[pControl]["p1"],sAEMorphing[pControl]["p2"],sAEMorphing[pControl]["duration"],the milliSecs -sAEMorphing[pControl]["StartTime"] , sAEMorphing[pControl]["Effect"]  )
+               set the points of pControl to aeMorphPointlists(sAEMorphing[pControl]["p1"],sAEMorphing[pControl]["p2"],sAEMorphing[pControl]["duration"],the milliSecs -sAEMorphing[pControl]["StartTime"] , sAEMorphing[pControl]["Effect"]  )
+            else
+               set the points of pControl to sAEMorphing[pControl]["p2"]
+               delete variable sAEMorphing[pControl]
+               send "aeMorphDone" to pControl
+            end if
          end if
+         send "aeExitFrame" && "aeMorphGraphic" to pControl
+      else
+         delete variable sAEMorphing[pControl]
       end if
-      send "aeExitFrame" && "aeMorphGraphic" to pControl
    end repeat
    
    --  sAEMorphGradientRamp
-   repeat for each line pControl in the keys of sAEMorphGradientRamp
-      send "aeEnterFrame" && "aeMorphGradient" to pControl
-      if sAEMorphGradientRamp[pControl]["StartTime"] <> "pending" then
-         if the millisecs - sAEMorphGradientRamp[pControl]["StartTime"] < sAEMorphGradientRamp[pControl]["duration"] then
-            --aeMorphPointlists pList1,pList2,pDuration,pCurrentTime,pEffect
-            set the fillGradient["ramp"] of pControl to aeMorphGradient(sAEMorphGradientRamp[pControl]["p1"],sAEMorphGradientRamp[pControl]["p2"],sAEMorphGradientRamp[pControl]["duration"],the milliSecs -sAEMorphGradientRamp[pControl]["StartTime"] , sAEMorphGradientRamp[pControl]["Effect"] )
-         else
-            set the fillGradient["ramp"] of pControl to sAEMorphGradientRamp[pControl]["p2"]
-            delete variable sAEMorphGradientRamp[pControl]
-            send "aeMorphGradientDone" to pControl
+   put the keys of sAEMorphGradientRamp into tControls
+   
+   repeat for each line pControl in tControls
+      if there is a pControl then
+         send "aeEnterFrame" && "aeMorphGradient" to pControl
+         if sAEMorphGradientRamp[pControl]["StartTime"] <> "pending" then
+            if the millisecs - sAEMorphGradientRamp[pControl]["StartTime"] < sAEMorphGradientRamp[pControl]["duration"] then
+               --aeMorphPointlists pList1,pList2,pDuration,pCurrentTime,pEffect
+               set the fillGradient["ramp"] of pControl to aeMorphGradient(sAEMorphGradientRamp[pControl]["p1"],sAEMorphGradientRamp[pControl]["p2"],sAEMorphGradientRamp[pControl]["duration"],the milliSecs -sAEMorphGradientRamp[pControl]["StartTime"] , sAEMorphGradientRamp[pControl]["Effect"] )
+            else
+               set the fillGradient["ramp"] of pControl to sAEMorphGradientRamp[pControl]["p2"]
+               delete variable sAEMorphGradientRamp[pControl]
+               send "aeMorphGradientDone" to pControl
+            end if
          end if
+         send "aeExitFrame" && "aeMorphGradient" to pControl
+      else
+         delete variable sAEMorphGradientRamp[pControl]
       end if
-      send "aeExitFrame" && "aeMorphGradient" to pControl
    end repeat
    
    -- rotate group
    
-   repeat for each line theGroup in the keys of sAERotateGroup
-      send "aeEnterFrame" && "aeRotateGroup" to theGroup
-      if sAERotateGroup[theGroup]["StartTime"] <> "pending" then
-         put sAERotateGroup[theGroup]["duration"] into tDuration
-         put sAERotateGroup[theGroup]["StartTime"] into tStartTime
-         put sAERotateGroup[theGroup]["Effect"] into tMethod
-         
-         if the millisecs - sAERotateGroup[theGroup]["StartTime"] < tDuration then
-            repeat for each line theControl in the keys of sAERotateGroup[theGroup]["controls"]
-               
-               put sAERotateGroup[theGroup]["Angle"] + sAERotateGroup[theGroup]["controls"][theControl]["Angle"] into tEndAngle
-               put sAERotateGroup[theGroup]["controls"][theControl]["Angle"] into tStartAngle
-               
-               switch tMethod
-                  case "in"
-                     put aeEaseIn(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
-                     break
-                  case "out"
-                     put aeEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
-                     break
-                  case "inOut"
-                     put aeEaseInOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
-                     break
-                  case "bounce"
-                     put aeBounceEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime) into tNewAngle
-                     break
-                  case "overshoot"
-                     put aeOverShootEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime) into tNewAngle
-                     break
-                  default
-                     put aeEaseIn(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,1) into tNewAngle
-                     break
-               end switch
-               
-               /*
-               put item 1 of theValue into centerX
-               put item 2 of theValue into centerY
-               put item 3 of theValue into isAngle
-               put item 4 of theValue into isRadius
-               */
-               
-               set the loc of theControl to pointOnCircle(sAERotateGroup[theGroup]["center"],tNewAngle,sAERotateGroup[theGroup]["controls"][theControl]["Distance"])
-            end repeat
+   put the keys of sAERotateGroup into tControls
+   
+   repeat for each line theGroup in tControls
+      if there is a theGroup then
+         send "aeEnterFrame" && "aeRotateGroup" to theGroup
+         if sAERotateGroup[theGroup]["StartTime"] <> "pending" then
+            put sAERotateGroup[theGroup]["duration"] into tDuration
+            put sAERotateGroup[theGroup]["StartTime"] into tStartTime
+            put sAERotateGroup[theGroup]["Effect"] into tMethod
             
-         else
-            repeat for each line theControl in the keys of sAERotateGroup[theGroup]["controls"]
-               put sAERotateGroup[theGroup]["Angle"] + sAERotateGroup[theGroup]["controls"][theControl]["Angle"] into tEndAngle
-               set the loc of theControl to pointOnCircle(sAERotateGroup[theGroup]["center"],tEndAngle,sAERotateGroup[theGroup]["controls"][theControl]["Distance"])
-            end repeat
-            
-            delete variable sAERotateGroup[theGroup]
+            if the millisecs - sAERotateGroup[theGroup]["StartTime"] < tDuration then
+               repeat for each line theControl in the keys of sAERotateGroup[theGroup]["controls"]
+                  
+                  put sAERotateGroup[theGroup]["Angle"] + sAERotateGroup[theGroup]["controls"][theControl]["Angle"] into tEndAngle
+                  put sAERotateGroup[theGroup]["controls"][theControl]["Angle"] into tStartAngle
+                  
+                  switch tMethod
+                     case "in"
+                        put aeEaseIn(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
+                        break
+                     case "out"
+                        put aeEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
+                        break
+                     case "inOut"
+                        put aeEaseInOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,3) into tNewAngle
+                        break
+                     case "bounce"
+                        put aeBounceEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime) into tNewAngle
+                        break
+                     case "overshoot"
+                        put aeOverShootEaseOut(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime) into tNewAngle
+                        break
+                     default
+                        put aeEaseIn(tStartAngle,tEndAngle,tDuration,the milliseconds-tStartTime,1) into tNewAngle
+                        break
+                  end switch
+                  
+                  /*
+                  put item 1 of theValue into centerX
+                  put item 2 of theValue into centerY
+                  put item 3 of theValue into isAngle
+                  put item 4 of theValue into isRadius
+                  */
+                  
+                  set the loc of theControl to pointOnCircle(sAERotateGroup[theGroup]["center"],tNewAngle,sAERotateGroup[theGroup]["controls"][theControl]["Distance"])
+               end repeat
+               
+            else
+               repeat for each line theControl in the keys of sAERotateGroup[theGroup]["controls"]
+                  put sAERotateGroup[theGroup]["Angle"] + sAERotateGroup[theGroup]["controls"][theControl]["Angle"] into tEndAngle
+                  set the loc of theControl to pointOnCircle(sAERotateGroup[theGroup]["center"],tEndAngle,sAERotateGroup[theGroup]["controls"][theControl]["Distance"])
+               end repeat
+               delete variable sAERotateGroup[theGroup]
+            end if
          end if
-         
+      else
+         delete variable sAERotateGroup[theGroup]
       end if
    end repeat
    
