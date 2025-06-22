@@ -42,8 +42,9 @@ on releaseStack
 end releaseStack
 
 on libraryStack
+   set the itemdel to "."
    if the short name of the target is not the short name of me then pass librarystack
-   if "dev" is in the environment and the version<5 then
+   if "dev" is in the environment and first item of the version < 5 then
       answer "Sorry, this version of animationEngine requires a Livecode 5.0 or higher engine."
       stop using me
       exit librarystack
